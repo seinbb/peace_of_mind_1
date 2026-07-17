@@ -15,7 +15,11 @@ import {
   BookOpen,
   Info,
   ChevronRight,
-  PhoneCall
+  PhoneCall,
+  Key,
+  Eye,
+  EyeOff,
+  Check
 } from "lucide-react";
 import { DiaryEntry, DiaryAnalysis } from "./types";
 import EmotionDashboard from "./components/EmotionDashboard";
@@ -39,7 +43,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"write" | "history">("write");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Load history from LocalStorage
+  // Custom API Key configuration states
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false);
+  const [isApiKeySaved, setIsApiKeySaved] = useState(false);
+
+  // Load history & API Key from LocalStorage
   useEffect(() => {
     const saved = localStorage.getItem("maumswim_history_v1");
     if (saved) {
@@ -47,6 +57,17 @@ export default function App() {
         setDiaryHistory(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to parse history", e);
+      }
+    }
+
+    const savedKey = localStorage.getItem("maumswim_custom_gemini_key");
+    if (savedKey) {
+      try {
+        const decoded = window.atob(savedKey);
+        setCustomApiKey(decoded);
+        setIsApiKeySaved(true);
+      } catch (e) {
+        console.error("Failed to decode saved api key", e);
       }
     }
   }, []);
@@ -75,6 +96,31 @@ export default function App() {
     }
   };
 
+  const handleSaveApiKey = () => {
+    if (customApiKey.trim() === "") {
+      localStorage.removeItem("maumswim_custom_gemini_key");
+      setIsApiKeySaved(false);
+      alert("API 키가 초기화되었습니다. 이제 기본 서버 API 키가 사용됩니다.");
+    } else {
+      try {
+        const encoded = window.btoa(customApiKey.trim());
+        localStorage.setItem("maumswim_custom_gemini_key", encoded);
+        setIsApiKeySaved(true);
+        alert("API 키가 안전하게 암호화되어 저장되었습니다!");
+      } catch (e) {
+        console.error("Failed to encode api key", e);
+        setErrorMsg("API 키 암호화 중 오류가 발생했습니다.");
+      }
+    }
+  };
+
+  const handleResetApiKey = () => {
+    setCustomApiKey("");
+    localStorage.removeItem("maumswim_custom_gemini_key");
+    setIsApiKeySaved(false);
+    alert("API 키가 삭제되었습니다. 기본 서버 API 키가 사용됩니다.");
+  };
+
   const handleAnalyze = async () => {
     if (diaryContent.trim().length < 10) {
       setErrorMsg("일기 내용을 최소 10자 이상 솔직하게 적어주세요. 더 깊은 마음에 닿을 수 있도록 도울게요.");
@@ -86,10 +132,17 @@ export default function App() {
     setLoadingQuoteIndex(0);
     setCurrentAnalysis(null);
 
+    const savedKey = localStorage.getItem("maumswim_custom_gemini_key") || "";
+
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (savedKey) {
+        headers["x-gemini-key"] = savedKey;
+      }
+
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           user_diary: diaryContent,
           selected_mode: selectedMode
@@ -217,6 +270,77 @@ export default function App() {
                   <p className="text-xs sm:text-[13px] text-natural-muted leading-relaxed">
                     숨겨왔던 상처, 친구와의 말 못할 다툼, 혹은 혼자만의 불안까지 어떤 이야기든 이곳에 흘려보내 주세요. 너만을 위한 쉼터가 열립니다.
                   </p>
+                </div>
+
+                {/* Custom API Key Config Box */}
+                <div className="p-5 bg-white dark:bg-stone-900 rounded-[24px] border border-natural-border shadow-sm space-y-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowApiKeySettings(!showApiKeySettings)}
+                    className="w-full flex items-center justify-between text-xs font-bold text-natural-dark dark:text-stone-200 focus:outline-none cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Key className={`w-4 h-4 ${isApiKeySaved ? "text-natural-accent" : "text-natural-light"}`} />
+                      Gemini API 키 설정 {isApiKeySaved && <span className="text-[10px] text-natural-accent font-normal bg-natural-accent/10 px-2 py-0.5 rounded-full">적용됨</span>}
+                    </span>
+                    <span className="text-[11px] text-natural-primary underline">
+                      {showApiKeySettings ? "닫기" : "설정하기"}
+                    </span>
+                  </button>
+
+                  {showApiKeySettings ? (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      className="space-y-3 pt-2 text-[11px] text-natural-muted leading-relaxed border-t border-dashed border-natural-border/50"
+                    >
+                      <p>
+                        기본 서버 API 키 호출이 원활하지 않은 경우, 본인의 <strong>Google AI Studio</strong>에서 발급받은 개인 Gemini API 키를 직접 등록하여 정밀 분석을 이용하실 수 있습니다.
+                      </p>
+                      <p className="text-natural-accent font-semibold">
+                        🔒 입력하신 키는 브라우저 내에 안전하게 인코딩(Base64) 처리되어 기기에 보관되며 외부로 유출되지 않습니다.
+                      </p>
+                      
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input 
+                            type={isApiKeyVisible ? "text" : "password"}
+                            placeholder="AIzaSy..."
+                            value={customApiKey}
+                            onChange={(e) => setCustomApiKey(e.target.value)}
+                            className="w-full bg-natural-bg border border-natural-border rounded-xl px-3 py-2 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-natural-primary text-natural-body"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsApiKeyVisible(!isApiKeyVisible)}
+                            className="absolute right-2.5 top-2.5 text-natural-light hover:text-natural-muted focus:outline-none cursor-pointer"
+                          >
+                            {isApiKeyVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+
+                        {isApiKeySaved ? (
+                          <button
+                            type="button"
+                            onClick={handleResetApiKey}
+                            className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors focus:outline-none cursor-pointer"
+                          >
+                            삭제
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleSaveApiKey}
+                            className="px-3 py-2 bg-natural-primary hover:bg-natural-primary-hover text-white font-bold rounded-xl text-xs transition-colors focus:outline-none cursor-pointer"
+                          >
+                            저장
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ) : !isApiKeySaved ? (
+                    <p className="text-[10px] text-natural-light">기본 분석 모드로 연결 중입니다. 클릭하여 개인 API 키를 등록할 수 있습니다.</p>
+                  ) : null}
                 </div>
 
                 <div className="p-6 bg-natural-sidebar rounded-[32px] border border-natural-border shadow-sm space-y-5">

@@ -194,7 +194,7 @@ app.post("/api/analyze", async (req, res) => {
       return;
     }
 
-    // 2. Gemini-based Sentiment Analysis with Graceful Fallback
+    // 2. Gemini-based Sentiment Analysis with Dynamic Client and Graceful Fallback
     const prompt = `사용자가 작성한 일기와 선택한 답변 모드를 분석하여 지정된 형식으로 JSON 결과를 반환하세요.
 
 [선택된 모드 (selected_mode)]
@@ -245,43 +245,72 @@ app.post("/api/analyze", async (req, res) => {
 
     let resultJson: any;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              response_mode: { type: Type.STRING, enum: ["solution", "empathy"] },
-              emotion: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING },
-                    percentage: { type: Type.INTEGER }
-                  },
-                  required: ["name", "percentage"]
-                }
-              },
-              summary: { type: Type.STRING },
-              empathy_message: { type: Type.STRING },
-              reflection_question: { type: Type.STRING },
-              risk_level: { type: Type.STRING, enum: ["normal", "warning", "high_risk"] }
-            },
-            required: ["response_mode", "emotion", "summary", "empathy_message", "reflection_question", "risk_level"]
+    // Resolve dynamic Gemini Client based on request header or fallback
+    const customKeyHeader = req.headers["x-gemini-key"] as string;
+    let requestApiKey = getGeminiApiKey();
+
+    if (customKeyHeader && customKeyHeader.trim() !== "") {
+      try {
+        const decoded = Buffer.from(customKeyHeader, "base64").toString("utf-8").trim();
+        if (decoded && decoded !== "") {
+          requestApiKey = decoded;
+        }
+      } catch (err) {
+        console.error("Failed to decode custom api key header:", err);
+      }
+    }
+
+    if (!requestApiKey || requestApiKey.trim() === "") {
+      console.log("No API Key configured. Using local rule-based fallback response.");
+      resultJson = generateFallbackResponse(user_diary, mode);
+    } else {
+      const requestAi = new GoogleGenAI({
+        apiKey: requestApiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
           }
         }
       });
 
-      const resultText = response.text?.trim() || "{}";
-      resultJson = JSON.parse(resultText);
-    } catch (geminiError: any) {
-      console.log("Using robust local rule-based response processor:", geminiError.message || geminiError);
-      resultJson = generateFallbackResponse(user_diary, mode);
+      try {
+        const response = await requestAi.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                response_mode: { type: Type.STRING, enum: ["solution", "empathy"] },
+                emotion: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      percentage: { type: Type.INTEGER }
+                    },
+                    required: ["name", "percentage"]
+                  }
+                },
+                summary: { type: Type.STRING },
+                empathy_message: { type: Type.STRING },
+                reflection_question: { type: Type.STRING },
+                risk_level: { type: Type.STRING, enum: ["normal", "warning", "high_risk"] }
+              },
+              required: ["response_mode", "emotion", "summary", "empathy_message", "reflection_question", "risk_level"]
+            }
+          }
+        });
+
+        const resultText = response.text?.trim() || "{}";
+        resultJson = JSON.parse(resultText);
+      } catch (geminiError: any) {
+        console.log("Using robust local rule-based response processor due to Gemini error:", geminiError.message || geminiError);
+        resultJson = generateFallbackResponse(user_diary, mode);
+      }
     }
 
     // 3. Post-Processing Safety Guard (Double-Check)
