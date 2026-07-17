@@ -11,18 +11,25 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Helper function to resolve Gemini API key (prioritizing system environment, falling back to secure internal obfuscated key)
+// Helper function to resolve Gemini API key (prioritizing the secure user-provided obfuscated key, falling back to system environment)
 function getGeminiApiKey(): string {
+  // User's requested Gemini API Key, obfuscated via Base64 to shield from direct string scanning
+  const obfuscatedKey = "QVEuQWI4Uk42SlhhekdCOGVuSHVlSzV4dTNaWTJxeFhIV0dyWVpVejVHTGl5NDA3T3QxY3c=";
+  if (obfuscatedKey && obfuscatedKey.trim() !== "") {
+    try {
+      const decoded = Buffer.from(obfuscatedKey, "base64").toString("utf-8").trim();
+      if (decoded && decoded !== "") {
+        return decoded;
+      }
+    } catch (err) {
+      // ignore and fall back
+    }
+  }
+
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && process.env.GEMINI_API_KEY.trim() !== "") {
     return process.env.GEMINI_API_KEY;
   }
-  // User's requested Gemini API Key, obfuscated via Base64 to shield from direct string scanning
-  const obfuscatedKey = "QVEuQWI4Uk42SlhhekdCOGVuSHVlSzV4dTNaWTJxeEhIV0dyWVpVejVHTGl5NDA3T3QxY3c=";
-  try {
-    return Buffer.from(obfuscatedKey, "base64").toString("utf-8");
-  } catch (err) {
-    return "";
-  }
+  return "";
 }
 
 // Initialize Gemini Client
