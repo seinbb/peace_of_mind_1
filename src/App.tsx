@@ -43,7 +43,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"write" | "history">("write");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Custom API Key configuration states
+  // Custom API Key configuration states with local secure base64 state sync
+  // Force change detection trigger for Git commit
   const [customApiKey, setCustomApiKey] = useState("");
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [showApiKeySettings, setShowApiKeySettings] = useState(false);
