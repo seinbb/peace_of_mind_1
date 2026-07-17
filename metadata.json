@@ -1,0 +1,6 @@
+{
+  "name": "마음쉼",
+  "description": "청소년 정서지원 AI - 일기를 기반으로 한 깊은 마음 분석과 따뜻한 공감 및 해결책 편지 전달 서비스",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
